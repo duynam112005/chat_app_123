@@ -4,7 +4,8 @@ class MyTextField extends StatefulWidget {
   final String hintText;
   final bool obscureText;
   final TextEditingController controller;
-  const MyTextField({super.key, required this.hintText, required this.obscureText, required this.controller});
+  final FocusNode? focusNode;
+  const MyTextField({super.key, required this.hintText, required this.obscureText, required this.controller, this.focusNode});
 
   @override
   State<MyTextField> createState() => _MyTextFieldState();
@@ -16,6 +17,7 @@ class _MyTextFieldState extends State<MyTextField> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 30),
       child: TextField(
+        focusNode: widget.focusNode,
         obscureText: widget.obscureText,
         controller: widget.controller,
         decoration: InputDecoration(

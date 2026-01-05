@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/auth/auth_service.dart';
 import 'package:flutter_application_1/components/my_button.dart';
 import 'package:flutter_application_1/components/my_textfield.dart';
+
+import '../services/auth/auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
   final Function()? onTap;
