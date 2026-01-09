@@ -22,72 +22,67 @@ class _ChatPageState extends State<ChatPage> {
   final AuthService _authService = AuthService();
   final ChatService _chatService = ChatService();
 
+  bool _sendByMe = false;
+
+  int _lastMessageCount = 0;
+  bool _showNewMessageIndicator = false;
+  int _unReadCount = 0;
+
   //send message method
   void sendMessage() async {
-    if (_messageController.text.isNotEmpty) {
-      //send message
-      await _chatService.sendMessage(widget.receiverId, _messageController.text);
-
-      //after send message, clear _messageController
-      _messageController.clear();
-    }
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    //clear sớm => UX mượt
+    _messageController.clear();
+    _sendByMe = true;
+    //send message
+    await _chatService.sendMessage(widget.receiverId, text);
   }
 
-  //for textfield focus: để theo dõi trạng thái focus textfield
-  FocusNode myFocusNode = FocusNode();
-
-  @override
-  //trong init để chạy 1 lần duy nhất khi widget được khởi tạo
-  void initState() {
-    super.initState();
-    //add listen to focus node
-    myFocusNode.addListener(() {
-      if (myFocusNode.hasFocus) {
-        //phải delay vì khi tap vào textfield mà scroll ngay thì sẽ bị sai vị trí do layout của textfield chưa đực set
-        //nên delay để hiển thị bàn phím đã rồi mới cuộn xuống tin nhắn mới nhất
-        Future.delayed(Duration(milliseconds: 500),
-                () => scrollDown());
-      }
-    });
-  }
-
-  //scroll controller: ScrollController dùng để điều chỉnh vị trí cuộn của ListView:
-  //maxScrollExtent: cuộn về cuối danh sách ( về tin nhắn cuối)
-  //minScrollExtent: cuộn về đầu danh sách (tin nhắn đầu). ở đây dùng min vì mình đang dùng reverse
-  //aminateTo: cuộn mượt
-  //curve: chuyển động. fastOutSlowIn: nhanh lúc đầu, chậm lúc cuối
   final ScrollController _scrollController = ScrollController();
 
-  void scrollDown() {
+  // hàm kiểm tra xem có đang ở gần đáy không
+  // nghĩa là khi người kia nhắn tin thì phải tự động scroll xuống nếu đang ở gần bottom
+  // set < 50px vì để tran auto scroll khi đang xem lại tin nhắn cũ mà người khác nhắn tin
+
+  //check xem gần bottom không (nhỏ hơn offset<= 120px thì auto scroll)
+  bool isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    return _scrollController.offset <= 120;
+  }
+
+  //hàm cuộn xuống tin nhắn mới nhất
+  void scrollToBottom() {
+    if (!_scrollController.hasClients) return;
     _scrollController.animateTo(
-        _scrollController.position.minScrollExtent, duration: Duration(milliseconds: 500),
-        curve: Curves.fastOutSlowIn);
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.fastOutSlowIn,
+    );
   }
 
   //dispose method
   @override
   void dispose() {
-    super.dispose();
     _messageController.dispose();
-    myFocusNode.dispose();
     _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme
-          .of(context)
-          .colorScheme
-          .background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: Text(widget.receiverEmail),
-      ),
+      backgroundColor: Theme.of(context).colorScheme.background,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: Text(widget.receiverEmail)),
       body: Column(
         children: [
           //display all messages
-          Expanded(child: _buildMessageList()),
+          Expanded(
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [_buildMessageList(), if (_showNewMessageIndicator) _showNewMessage()],
+            ),
+          ),
 
           //user input
           _buildUserInput(),
@@ -96,10 +91,42 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  //showNewMessage
+  Widget _showNewMessage() {
+    return Positioned(
+      bottom: 16,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _showNewMessageIndicator = false;
+            _unReadCount = 0;
+          });
+          //đổi key xong mới scroll
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            scrollToBottom();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              Text(_unReadCount > 1 ? '$_unReadCount new messages' : 'New message'),
+              Icon(Icons.keyboard_arrow_down),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   //build message list
   Widget _buildMessageList() {
     final String senderId = _authService.getCurrentUser()!.uid;
-    return StreamBuilder(
+    return StreamBuilder<QuerySnapshot>(
       stream: _chatService.getMessages(senderId, widget.receiverId),
       builder: (context, snapshot) {
         //errors
@@ -111,16 +138,45 @@ class _ChatPageState extends State<ChatPage> {
           return Text("Loading");
         }
 
-        //return ListView
-        // return ListView(
-        //   controller: _scrollController,
-        //   children: snapshot.data!.docs.map((doc) => _buildMessageItem(doc)).toList(),
-        // );
+        int currentMessageCount = snapshot.data!.docs.length;
+
+        //scroll nếu mình gửi tin nhắn hoặc nếu đang ở tin nhắn mới nhất
+        //ví dụ đang đọc tin nhắn cũ mà mình nhắn 1 tin mới thì scroll (vào nhánh if)
+        //còn nếu người khác nhắn tin thì đang ở đáy thì scroll(vào nhánh else if)
+        //WidgetsBinding.instance.addPostFrameCallback: đợi các widget bị thay đổi phải rebuild xong thì mới thực hiện code bên trong
+
+        //chỉ addCallback khi có tin nhắn mới
+        if (_lastMessageCount != currentMessageCount) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            //!_scrollController.hasClients nghĩa là scrollController chưa được gắn vào 1 widget scrollable nào
+            // if (!_scrollController.hasClients) return;
+            //nếu mình gửi tin nhắn, hoặc đang ở gần tin nhắn mới nhất thì auto scroll
+            if (_sendByMe || isNearBottom()) {
+              scrollToBottom();
+              _sendByMe = false;
+              if (_showNewMessageIndicator || _unReadCount > 0) {
+                setState(() {
+                  _showNewMessageIndicator = false;
+                  _unReadCount = 0;
+                });
+              }
+            } else {
+              //chỉ những cái nào UI thay đổi thì mới cần đưa vào setState
+              setState(() {
+                _showNewMessageIndicator = true;
+                _unReadCount++;
+              });
+            }
+          });
+          _lastMessageCount = currentMessageCount;
+        }
+
+
         return ListView.builder(
           controller: _scrollController,
           reverse: true,
           itemCount: snapshot.data!.docs.length,
-          itemBuilder: (context, index){
+          itemBuilder: (context, index) {
             return _buildMessageItem(snapshot.data!.docs[index]);
           },
         );
@@ -153,7 +209,7 @@ class _ChatPageState extends State<ChatPage> {
               controller: _messageController,
               hintText: 'Type a message',
               obscureText: false,
-              focusNode: myFocusNode,
+              //focusNode: myFocusNode,
             ),
           ),
 
@@ -168,3 +224,5 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 }
+
+

@@ -32,6 +32,7 @@ class AuthService{
         {
           'uid': userCredential.user!.uid,
           'email': email,
+          'theme': 'light'
         }
       );
       return userCredential;

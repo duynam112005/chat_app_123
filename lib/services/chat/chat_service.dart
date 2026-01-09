@@ -9,6 +9,7 @@ class ChatService {
 
   //get user stream
   Stream<List<Map<String, dynamic>>> getUsersStream() {
+    //map ở ngoài nghĩa là mỗi khi snapshot thay đổi( thêm, xóa user thì phần ở trong sẽ được chạy)
     return _firestore.collection('Users').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         //go through each individual user

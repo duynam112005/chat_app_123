@@ -16,7 +16,7 @@ class _ChatBubbleState extends State<ChatBubble> {
       padding: const EdgeInsets.symmetric(horizontal: 6,vertical: 6),
       margin: widget.isCurrentUser? EdgeInsets.fromLTRB(90, 2, 8, 2) : EdgeInsets.fromLTRB(8, 2, 90, 2),
       decoration: BoxDecoration(
-        color: widget.isCurrentUser? Colors.green : Colors.grey,
+        color: widget.isCurrentUser? Colors.green : Theme.of(context).colorScheme.secondary,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(widget.message),

@@ -3,7 +3,7 @@ import '../pages/settings_page.dart';
 import '../services/auth/auth_service.dart';
 
 class MyDrawer extends StatefulWidget {
-  const MyDrawer({super.key});
+  const MyDrawer({super.key,});
 
   @override
   State<MyDrawer> createState() => _MyDrawerState();
